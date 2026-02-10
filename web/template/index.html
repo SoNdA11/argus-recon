@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARGUS RECON</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap"
+        rel="stylesheet">
+
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+
+    <nav class="sidebar">
+        <div class="logo">
+            <i class='bx bx-radar'></i>
+            <span>ARGUS</span>
+        </div>
+
+        <ul class="nav-links">
+            <li class="active">
+                <a href="#"><i class='bx bx-grid-alt'></i> Dashboard</a>
+            </li>
+            <li>
+                <a href="#"><i class='bx bx-analyse'></i> Analysis</a>
+            </li>
+            <li>
+                <a href="#"><i class='bx bx-cog'></i> Settings</a>
+            </li>
+        </ul>
+
+        <div class="connection-status">
+            <div class="status-dot" id="conn-dot"></div>
+            <div class="status-text">
+                <span class="label">TARGET STATUS</span>
+                <span class="value" id="conn-text">SEARCHING...</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+
+        <header class="top-header">
+            <div class="header-title">
+                <h1>Live Operations</h1>
+                <p>Bluetooth Low Energy Interception & Analysis</p>
+            </div>
+
+            <button id="btn-disconnect" class="btn-danger hidden" onclick="disconnectTrainer()">
+                <i class='bx bx-unlink'></i> TERMINATE LINK
+            </button>
+        </header>
+
+        <div class="kpi-grid">
+            <div class="card kpi-card">
+                <div class="kpi-icon icon-input"><i class='bx bx-log-in-circle'></i></div>
+                <div class="kpi-info">
+                    <span class="label">Real Input</span>
+                    <div class="value-group">
+                        <span class="value" id="val-real">0</span>
+                        <span class="unit">W</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card kpi-card">
+                <div class="kpi-icon icon-output"><i class='bx bx-log-out-circle'></i></div>
+                <div class="kpi-info">
+                    <span class="label">Modified Output</span>
+                    <div class="value-group">
+                        <span class="value text-glow" id="val-out">0</span>
+                        <span class="unit">W</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card kpi-card secondary">
+                <div class="kpi-info">
+                    <span class="label">Heart Rate</span>
+                    <div class="value-group">
+                        <span class="value text-glow" id="val-hr" style="color: var(--accent-pink);">--</span>
+                        <span class="unit">BPM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-split">
+
+            <div class="card chart-section">
+                <div class="card-header">
+                    <h3>Telemetry Stream</h3>
+                    <div class="live-badge"><span class="pulse"></span> LIVE</div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card control-section">
+                <div class="card-header">
+                    <h3>Control Vector</h3>
+                </div>
+
+                <div class="mode-selector">
+                    <div class="mode-option active" id="mode-sim" onclick="setMode('sim')">
+                        <div class="icon"><i class='bx bx-ghost'></i></div>
+                        <div class="info">
+                            <span class="title">Ghost Sim</span>
+                            <span class="desc">Synthetic Persona</span>
+                        </div>
+                    </div>
+                    <div class="mode-option" id="mode-bridge" onclick="setMode('bridge')">
+                        <div class="icon"><i class='bx bx-transfer-alt'></i></div>
+                        <div class="info">
+                            <span class="title">MITM Bridge</span>
+                            <span class="desc">Packet Injection</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="separator"></div>
+
+                <div id="ctrl-sim" class="control-panel">
+                    <div class="slider-header">
+                        <label>Base Power</label>
+                        <span class="slider-value" id="lbl-sim">150 W</span>
+                    </div>
+                    <input type="range" class="tech-slider" min="50" max="600" value="150"
+                        oninput="sendSim(this.value)">
+                    <div class="slider-labels">
+                        <span>50W</span>
+                        <span>600W</span>
+                    </div>
+                </div>
+
+                <div id="ctrl-bridge" class="control-panel hidden">
+                    <div class="toggle-group">
+                        <label>Boost Method</label>
+                        <div class="toggle-switch">
+                            <button id="btn-fix" class="t-btn active" onclick="setBoostType('fix')">Fixed</button>
+                            <button id="btn-pct" class="t-btn" onclick="setBoostType('pct')">%</button>
+                        </div>
+                    </div>
+
+                    <div class="slider-header" style="margin-top: 20px;">
+                        <label>Injection Gain</label>
+                        <span class="slider-value highlight">+<span id="lbl-boost">0</span> <span
+                                id="lbl-unit">W</span></span>
+                    </div>
+                    <input type="range" id="slider-boost" class="tech-slider attack" min="0" max="300" value="0"
+                        oninput="sendBoost(this.value)">
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>
