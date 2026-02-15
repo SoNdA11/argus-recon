@@ -4,19 +4,26 @@ import "sync"
 
 type AppState struct {
 	sync.Mutex
-	Mode string
+	Mode string		// "sim" or "bridge"
 
+	// Configuration
 	SimBasePower int
 	BoostValue   int
 	BoostType    string
 
+	// Real Telemetry (Input)
 	RealPower     int
 	RealCadence   int
+	RealHR		  int
+
+	// Final Telemetry (Output to App)
 	OutputPower   int
 	OutputCadence int
 	OutputHR      int
 
+	// Connectivity Status
 	ConnectedReal   bool
+	ConnectedHR		bool
 	ClientConnected bool
 }
 

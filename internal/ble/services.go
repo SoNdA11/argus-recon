@@ -82,12 +82,13 @@ func UpdateOutputs(watts, rpm, hr int) {
 		cumCrankRevs++
 		timePerRev := (60.0 / float64(rpm)) * 1024.0
 		lastCrankTime += uint16(timePerRev)
-		cPayload := make([]byte, 5)
-		cPayload[0] = 0x02
-		binary.LittleEndian.PutUint16(cPayload[1:3], cumCrankRevs)
-		binary.LittleEndian.PutUint16(cPayload[3:5], lastCrankTime)
-		charCadence.Write(cPayload)
 	}
+
+	cPayload := make([]byte, 5)
+	cPayload[0] = 0x02 // Flags: Crank Data Present
+	binary.LittleEndian.PutUint16(cPayload[1:3], cumCrankRevs)
+	binary.LittleEndian.PutUint16(cPayload[3:5], lastCrankTime)
+	charCadence.Write(cPayload)
 
 	if hr > 190 {
 		hr = 190
