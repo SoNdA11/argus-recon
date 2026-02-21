@@ -571,3 +571,52 @@ input[type=range]:hover::-moz-range-thumb {
     margin-left: 4px;
     opacity: 0.7;
 }
+
+.integrity-grid {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 24px;
+}
+
+.targets-list {
+    display: grid;
+    gap: 10px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.target-row {
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+.target-row.active {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 0 1px rgba(0, 242, 255, 0.25);
+}
+
+.target-meta {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.signals {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.reasons {
+    margin-top: 14px;
+    padding-left: 16px;
+    color: #fcd34d;
+    font-size: 0.85rem;
+    display: grid;
+    gap: 6px;
+}

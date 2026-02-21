@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/SoNdA11/argus-recon/internal/app"
@@ -24,7 +25,7 @@ func Start() {
 	http.HandleFunc("/ws", handleWebSocket)
 
 	fmt.Println("[HTTP] Online interface at: http://localhost:8080")
-	
+
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		fmt.Printf("[FATAL] Error starting server: %v\n", err)
 	}
@@ -40,21 +41,27 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for {
 			app.State.Lock()
+			devices := discoveredAsList(app.State.DiscoveredDevices)
 			msg := map[string]interface{}{
-				"mode":          app.State.Mode,
-				"boostValue":    app.State.BoostValue,
-				"boostType":     app.State.BoostType,
-				"simBasePower":  app.State.SimBasePower,
-				"realPower":     app.State.RealPower,
-				"outputPower":   app.State.OutputPower,
-				"connected":     app.State.ConnectedReal,
-				"clientConn":    app.State.ClientConnected,
-				"outputHR":      app.State.OutputHR,
+				"mode":              app.State.Mode,
+				"boostValue":        app.State.BoostValue,
+				"boostType":         app.State.BoostType,
+				"simBasePower":      app.State.SimBasePower,
+				"realPower":         app.State.RealPower,
+				"outputPower":       app.State.OutputPower,
+				"connected":         app.State.ConnectedReal,
+				"clientConn":        app.State.ClientConnected,
+				"outputHR":          app.State.OutputHR,
+				"integrity":         app.State.Integrity,
+				"integrityReports":  app.State.IntegrityReports,
+				"discoveredDevices": devices,
+				"trainerAddress":    app.State.TrainerAddress,
+				"localVirtualAddr":  app.State.LocalVirtualAddr,
 			}
 			app.State.Unlock()
-			
+
 			if err := conn.WriteJSON(msg); err != nil {
-				return 
+				return
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
@@ -67,12 +74,21 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 
 		app.State.Lock()
-		if m, ok := cmd["mode"].(string); ok { app.State.Mode = m }
-		if b, ok := cmd["boost"].(float64); ok { app.State.BoostValue = int(b) }
-		if s, ok := cmd["sim"].(float64); ok { app.State.SimBasePower = int(s) }
-		if t, ok := cmd["boostType"].(string); ok { 
-			app.State.BoostType = t 
-			app.State.BoostValue = 0 
+		if m, ok := cmd["mode"].(string); ok {
+			app.State.Mode = m
+		}
+		if b, ok := cmd["boost"].(float64); ok {
+			app.State.BoostValue = int(b)
+		}
+		if s, ok := cmd["sim"].(float64); ok {
+			app.State.SimBasePower = int(s)
+		}
+		if t, ok := cmd["boostType"].(string); ok {
+			app.State.BoostType = t
+			app.State.BoostValue = 0
+		}
+		if trainerAddress, ok := cmd["trainerAddress"].(string); ok {
+			app.State.TrainerAddress = trainerAddress
 		}
 		app.State.Unlock()
 
@@ -80,4 +96,24 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			go ble.DisconnectTrainer()
 		}
 	}
+}
+
+func discoveredAsList(devices map[string]app.DiscoveredDevice) []app.DiscoveredDevice {
+	list := make([]app.DiscoveredDevice, 0, len(devices))
+	for _, v := range devices {
+		list = append(list, v)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Order != list[j].Order {
+			return list[i].Order < list[j].Order
+		}
+		if list[i].FirstSeenMs != list[j].FirstSeenMs {
+			return list[i].FirstSeenMs < list[j].FirstSeenMs
+		}
+		return list[i].Address < list[j].Address
+	})
+	if len(list) > 20 {
+		return list[:20]
+	}
+	return list
 }

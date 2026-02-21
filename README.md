@@ -99,3 +99,16 @@ This tool was developed exclusively for educational and cybersecurity research p
 * **DO NOT** use this tool in competitive environments, online rankings, or sanctioned e-sports events.
 * The use of packet injection tools violates the Terms of Service of most online platforms.
 * The author assumes no responsibility for misuse. The goal is to advocate for better security standards (e.g., Bonding/Encryption) in IoT fitness devices.
+
+## BLE Integrity Scanner
+
+Argus Recon now includes an integrity scanner layer with:
+
+* BLE target discovery list (MAC/name/RSSI/services)
+* Real-time integrity score (0–100)
+* Classification: genuine / suspect / emulator
+* Behavioral signals: latency, jitter, notification rate, power-cadence drift
+
+* Operator dashboard panel for target selection and signal reasons
+
+See `docs/BLE_INTEGRITY_SCANNER.md` for architecture and deployment guidance.
