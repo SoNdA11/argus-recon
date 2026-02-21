@@ -7,6 +7,7 @@ import (
 
 	"github.com/SoNdA11/argus-recon/internal/app"
 	"github.com/SoNdA11/argus-recon/internal/ble"
+	"github.com/SoNdA11/argus-recon/internal/integrity"
 	"github.com/SoNdA11/argus-recon/internal/server"
 )
 
@@ -17,6 +18,7 @@ func main() {
 	ble.SetupServices()
 
 	go ble.StartScanner()
+	go integrity.Start()
 
 	go logicLoop()
 
@@ -37,17 +39,19 @@ func logicLoop() {
 		if app.State.Mode == "sim" {
 			// --- SIMULATOR MODE ---
 			base := app.State.SimBasePower
-			if base == 0 { base = 150 }
-			
+			if base == 0 {
+				base = 150
+			}
+
 			app.State.OutputPower = base + noise
-			
+
 			// Cadence Logic for Sim
 			if app.State.OutputPower > 0 {
 				app.State.OutputCadence = 90 + (noise / 2)
 			} else {
 				app.State.OutputCadence = 0
 			}
-			
+
 			// HR Logic for Sim (Fallback if no Real HR)
 			if app.State.RealHR > 0 {
 				app.State.OutputHR = app.State.RealHR
@@ -85,11 +89,13 @@ func logicLoop() {
 				} else {
 					// Fallback estimation: 60rpm + (Watts/5) capped at 100
 					estimated := 60 + (app.State.RealPower / 5)
-					if estimated > 100 { estimated = 100 }
+					if estimated > 100 {
+						estimated = 100
+					}
 					app.State.OutputCadence = estimated
 				}
 			}
-			
+
 			// Use Real HR from sensor if available.
 			if app.State.RealHR > 0 {
 				app.State.OutputHR = app.State.RealHR
@@ -100,8 +106,12 @@ func logicLoop() {
 		}
 
 		// Security Limits
-		if app.State.OutputPower < 0 { app.State.OutputPower = 0 }
-		if app.State.OutputHR > 190 { app.State.OutputHR = 190 }
+		if app.State.OutputPower < 0 {
+			app.State.OutputPower = 0
+		}
+		if app.State.OutputHR > 190 {
+			app.State.OutputHR = 190
+		}
 
 		// Send to BLE
 		ble.UpdateOutputs(app.State.OutputPower, app.State.OutputCadence, app.State.OutputHR)

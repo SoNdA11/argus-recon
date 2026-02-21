@@ -4,7 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/SoNdA11/argus-recon/internal/app"
 	"tinygo.org/x/bluetooth"
 )
 
@@ -70,6 +72,42 @@ func SetupServices() {
 		log.Fatal(err)
 	}
 	adv.Start()
+
+	registerLocalVirtualDevice("Argus X-Link")
+}
+
+func registerLocalVirtualDevice(name string) {
+	address := "LOCAL-VIRTUAL"
+	if mac, err := Adapter.Address(); err == nil {
+		address = mac.String()
+	}
+
+	app.State.Lock()
+	defer app.State.Unlock()
+
+	now := time.Now()
+	app.State.AdapterAddress = address
+	app.State.LocalVirtualAddr = address
+	order := app.State.NextDeviceOrder
+	if existing, ok := app.State.DiscoveredDevices[address]; ok && existing.Order > 0 {
+		order = existing.Order
+	} else {
+		app.State.NextDeviceOrder++
+	}
+
+	delete(app.State.DiscoveredDevices, "LOCAL-VIRTUAL")
+	app.State.DiscoveredDevices[address] = app.DiscoveredDevice{
+		Address:             address,
+		Name:                name,
+		RSSI:                0,
+		HasCyclingPower:     true,
+		HasHeartRate:        true,
+		LastSeenUnix:        now.Unix(),
+		LastSeenMs:          now.UnixMilli(),
+		FirstSeenMs:         now.UnixMilli(),
+		Order:               order,
+		ObservedAdvInterval: 1000,
+	}
 }
 
 func UpdateOutputs(watts, rpm, hr int) {
