@@ -12,6 +12,12 @@
 
 By exploiting the lack of encryption in standard GATT services (specifically `0x1818` Cycling Power), Argus Recon acts as a transparent **Man-in-the-Middle (MITM)** agent. It sits between the hardware (Smart Trainer) and the application (Zwift/MyWhoosh), allowing for real-time interception, analysis, and modification of telemetry data.
 
+<p align="center">
+  <img src="docs/assets/print-argus-recon.png" alt="Argus Recon SIGINT Dashboard" width="100%">
+  <br>
+  <em>Argus Recon Tactical Signal Intelligence Dashboard</em>
+</p>
+
 ## Research Goals
 
 * **Protocol Analysis:** Demonstrate how cleartext GATT transmission exposes user data.

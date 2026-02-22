@@ -24,6 +24,8 @@ type DiscoveredDevice struct {
 	FirstSeenMs         int64   `json:"-"`
 	Order               int64   `json:"-"`
 	ObservedAdvInterval float64 `json:"observedAdvIntervalMs"`
+	ManufacturerData    string  `json:"manufacturerData"`
+	GATTHash            string  `json:"gattHash"`
 }
 
 type IntegritySignals struct {
@@ -36,18 +38,20 @@ type IntegritySignals struct {
 }
 
 type IntegrityReport struct {
-	TargetAddress   string               `json:"targetAddress"`
-	TargetName      string               `json:"targetName"`
-	Score           int                  `json:"score"`
-	Classification  DeviceClassification `json:"classification"`
-	Confidence      float64              `json:"confidence"`
-	Reasons         []string             `json:"reasons"`
-	ObservedPHY     string               `json:"observedPhy"`
-	ObservedBLEVers string               `json:"observedBleVersion"`
-	ObservedOUI     string               `json:"observedOui"`
-	VendorGuess     string               `json:"vendorGuess"`
-	LastUpdatedUnix int64                `json:"lastUpdatedUnix"`
-	Signals         IntegritySignals     `json:"signals"`
+	TargetAddress    string               `json:"targetAddress"`
+	TargetName       string               `json:"targetName"`
+	Score            int                  `json:"score"`
+	Classification   DeviceClassification `json:"classification"`
+	Confidence       float64              `json:"confidence"`
+	Reasons          []string             `json:"reasons"`
+	ObservedPHY      string               `json:"observedPhy"`
+	ObservedBLEVers  string               `json:"observedBleVersion"`
+	ObservedOUI      string               `json:"observedOui"`
+	VendorGuess      string               `json:"vendorGuess"`
+	LastUpdatedUnix  int64                `json:"lastUpdatedUnix"`
+	Signals          IntegritySignals     `json:"signals"`
+	GATTHash         string               `json:"gattHash"`
+	ManufacturerData string               `json:"manufacturerData"`
 }
 
 type AppState struct {
