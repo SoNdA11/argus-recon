@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/SoNdA11/argus-recon/internal/app"
+	"github.com/SoNdA11/argus-recon/internal/integrity"
 	"tinygo.org/x/bluetooth"
 )
 
@@ -87,7 +88,6 @@ func shouldPauseScan() bool {
 	if connectingTrainer || connectingHR {
 		return true
 	}
-	// NOTE: many adapters/OS stacks cannot keep stable passive scan while maintaining active GATT links.
 	if trainerDevice != nil || hrDevice != nil {
 		return true
 	}
@@ -103,32 +103,72 @@ func connectTrainer(addr bluetooth.Address) {
 	}
 
 	trainerDevice = &device
-	fmt.Println("[BLE] Trainer Connected! Discovering Services...")
+	fmt.Println("[BLE] Trainer Connected! Initiating Deep GATT Discovery...")
 
 	app.State.Lock()
 	app.State.TrainerAddress = addr.String()
 	app.State.Unlock()
 
-	services, _ := device.DiscoverServices([]bluetooth.UUID{ServiceCyclingPower})
-	for _, service := range services {
-		chars, _ := service.DiscoverCharacteristics([]bluetooth.UUID{CharCyclingPowerMeasure})
-		for _, char := range chars {
-			fmt.Println("[BLE] Subscribing to Power Measurement...")
-			char.EnableNotifications(func(buf []byte) {
-				t0 := time.Now()
-				power, cadence := parsePowerCadence(buf)
-				latencyMs := time.Since(t0).Seconds() * 1000
-
-				app.State.Lock()
-				app.State.RealPower = power
-				app.State.RealCadence = cadence
-				app.State.ConnectedReal = true
-				app.State.PowerTimestamps = appendTrimTimes(app.State.PowerTimestamps, time.Now(), 80)
-				app.State.ResponseLatencies = appendTrimFloat(app.State.ResponseLatencies, latencyMs, 80)
-				app.State.Unlock()
-			})
-		}
+	services, err := device.DiscoverServices(nil)
+	if err != nil {
+		fmt.Printf("[BLE] GATT Discovery Failed: %v\n", err)
+		return
 	}
+
+	var deviceServices []integrity.GATTService
+
+	for _, service := range services {
+		gattSrv := integrity.GATTService{UUID: service.UUID().String()}
+
+		chars, _ := service.DiscoverCharacteristics(nil)
+		for _, char := range chars {
+			props := "N/A"
+
+			gattSrv.Characteristics = append(gattSrv.Characteristics, integrity.GATTCharacteristic{
+				UUID:       char.UUID().String(),
+				Properties: props,
+			})
+
+			if char.UUID() == CharCyclingPowerMeasure {
+				fmt.Println("[BLE] Subscribing to Power Measurement...")
+
+				var lastNotify time.Time
+
+				char.EnableNotifications(func(buf []byte) {
+					now := time.Now()
+					var intervalMs float64
+
+					if !lastNotify.IsZero() {
+						intervalMs = float64(now.Sub(lastNotify).Milliseconds())
+					} else {
+						intervalMs = 1000.0
+					}
+					lastNotify = now
+
+					power, cadence := parsePowerCadence(buf)
+
+					app.State.Lock()
+					app.State.RealPower = power
+					app.State.RealCadence = cadence
+					app.State.ConnectedReal = true
+					app.State.PowerTimestamps = appendTrimTimes(app.State.PowerTimestamps, now, 80)
+					app.State.ResponseLatencies = appendTrimFloat(app.State.ResponseLatencies, intervalMs, 80)
+					app.State.Unlock()
+				})
+			}
+		}
+		deviceServices = append(deviceServices, gattSrv)
+	}
+
+	gattHash := integrity.GenerateGATTHash(deviceServices)
+	fmt.Printf("[INTEGRITY] GATT Fingerprint Hash: %s\n", gattHash)
+
+	app.State.Lock()
+	if dev, ok := app.State.DiscoveredDevices[addr.String()]; ok {
+		dev.GATTHash = gattHash
+		app.State.DiscoveredDevices[addr.String()] = dev
+	}
+	app.State.Unlock()
 }
 
 func connectHR(addr bluetooth.Address) {
@@ -166,6 +206,12 @@ func registerScanResult(result bluetooth.ScanResult) {
 	address := result.Address.String()
 	now := time.Now()
 
+	mdHex := ""
+	for _, md := range result.ManufacturerData() {
+		mdHex += fmt.Sprintf("%04X:%X ", md.CompanyID, md.Data)
+	}
+	parsedMD := strings.TrimSpace(mdHex)
+
 	app.State.Lock()
 	defer app.State.Unlock()
 
@@ -183,12 +229,18 @@ func registerScanResult(result bluetooth.ScanResult) {
 			dev.ObservedAdvInterval = (interval + dev.ObservedAdvInterval) / 2
 		}
 	}
+
 	dev.Name = result.LocalName()
 	dev.RSSI = result.RSSI
 	dev.HasCyclingPower = result.HasServiceUUID(ServiceCyclingPower)
 	dev.HasHeartRate = result.HasServiceUUID(ServiceHeartRate)
 	dev.LastSeenUnix = now.Unix()
 	dev.LastSeenMs = now.UnixMilli()
+
+	if parsedMD != "" {
+		dev.ManufacturerData = parsedMD
+	}
+
 	app.State.DiscoveredDevices[address] = dev
 }
 
@@ -230,7 +282,7 @@ func parsePowerCadence(buf []byte) (int, int) {
 
 	cadence := 0
 	if flags&0x20 != 0 && len(buf) >= offset+4 {
-		// Cadence derivation can be added from cumulative crank rev deltas.
+		// Placeholder: cadence logic
 	}
 
 	if power < 0 {

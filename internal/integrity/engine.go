@@ -53,6 +53,26 @@ func recompute() {
 		}
 	}
 	if report, ok := app.State.IntegrityReports[selected]; ok {
+
+		isSpoofing := false
+
+		switch app.State.Mode {
+		case "sim":
+			isSpoofing = true
+			report.Reasons = append([]string{"[!] CRITICAL ALERT: Ghost mode active. Synthetically generated telemetry."}, report.Reasons...)
+		case "bridge":
+			if app.State.BoostValue != 0 || app.State.OutputPower != app.State.RealPower {
+				isSpoofing = true
+				report.Reasons = append([]string{"[!] CRITICAL ALERT: MITM Proxy Active. Discrepancy detected between Ingress (Real) and Egress (Spoofed)."}, report.Reasons...)
+			}
+		}
+
+		if isSpoofing {
+			report.Score = 15
+			report.Classification = app.ClassificationEmulator
+			report.Confidence = 0.99
+		}
+
 		app.State.Integrity = report
 	}
 }
@@ -128,17 +148,19 @@ func buildReportForDevice(dev app.DiscoveredDevice, isSelectedTrainer, isLocalVi
 	}
 
 	return app.IntegrityReport{
-		TargetAddress:   dev.Address,
-		TargetName:      dev.Name,
-		Score:           score,
-		Classification:  class,
-		Confidence:      confidence,
-		Reasons:         reasons,
-		ObservedPHY:     "1M",
-		ObservedBLEVers: "4.2+",
-		ObservedOUI:     oui,
-		VendorGuess:     vendor,
-		Signals:         signals,
+		TargetAddress:    dev.Address,
+		TargetName:       dev.Name,
+		Score:            score,
+		Classification:   class,
+		Confidence:       confidence,
+		Reasons:          reasons,
+		ObservedPHY:      "1M",
+		ObservedBLEVers:  "4.2+",
+		ObservedOUI:      oui,
+		VendorGuess:      vendor,
+		ManufacturerData: dev.ManufacturerData,
+		GATTHash:         dev.GATTHash,
+		Signals:          signals,
 	}
 }
 

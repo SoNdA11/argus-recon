@@ -19,28 +19,32 @@ const labels = Array(initialDataCount).fill('');
 const dataReal = Array(initialDataCount).fill(0);
 const dataOut = Array(initialDataCount).fill(0);
 
+// Global Font change for SecOps Theme
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.color = '#64748b';
+
 const chart = new Chart(ctx, {
     type: 'line',
     data: {
         labels,
         datasets: [
             {
-                label: 'Modified Output',
+                label: 'Spoofed Egress',
                 data: dataOut,
-                borderColor: '#3b82f6',
-                backgroundColor: (context) => createGradient(context.chart.ctx, 'rgba(59, 130, 246, 0.4)', 'rgba(59, 130, 246, 0.0)'),
+                borderColor: '#00e5ff', // Cyan
+                backgroundColor: (context) => createGradient(context.chart.ctx, 'rgba(0, 229, 255, 0.2)', 'rgba(0,0,0,0)'),
                 borderWidth: 2,
-                tension: 0.4,
+                tension: 0.3, // Smooth, precise curve
                 fill: true,
                 pointRadius: 0,
             },
             {
-                label: 'Real Input',
+                label: 'Raw Ingress',
                 data: dataReal,
-                borderColor: '#647d8f',
+                borderColor: '#475569', // Slate
                 borderWidth: 2,
-                borderDash: [4, 4],
-                tension: 0.4,
+                borderDash: [5, 5],
+                tension: 0.3,
                 pointRadius: 0,
             },
         ],
@@ -53,9 +57,9 @@ const chart = new Chart(ctx, {
         scales: {
             x: { display: false },
             y: {
-                grid: { color: '#334155', tickLength: 0 },
+                grid: { color: 'rgba(255, 255, 255, 0.05)', tickLength: 0 },
                 border: { display: false },
-                ticks: { color: '#94a3b8', font: { family: 'Inter', size: 10 }, padding: 10 },
+                ticks: { padding: 10 },
                 suggestedMin: 0,
                 suggestedMax: 300,
             },
@@ -70,18 +74,18 @@ const integrityChart = integrityCtx
         data: {
             labels: [],
             datasets: [
-                { label: 'Latency (ms)', data: [], backgroundColor: 'rgba(59,130,246,0.65)' },
-                { label: 'Jitter (ms)', data: [], backgroundColor: 'rgba(16,185,129,0.65)' },
+                { label: 'Latency (ms)', data: [], backgroundColor: 'rgba(0, 229, 255, 0.7)' }, // Cyan
+                { label: 'Jitter (ms)', data: [], backgroundColor: 'rgba(255, 42, 109, 0.7)' }, // Magenta/Red
             ],
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: false,
-            plugins: { legend: { labels: { color: '#cbd5e1' } } },
+            plugins: { legend: { labels: { color: '#64748b' } } },
             scales: {
-                x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
-                y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' }, beginAtZero: true },
+                x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255, 255, 255, 0.05)' } },
+                y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255, 255, 255, 0.05)' }, beginAtZero: true },
             },
         },
     })
@@ -93,7 +97,6 @@ ws.onmessage = (event) => {
 
     document.getElementById('val-real').innerText = data.realPower;
     document.getElementById('val-out').innerText = data.outputPower;
-    document.getElementById('val-score').innerText = data.integrity?.score ?? '--';
     document.getElementById('val-hr').innerText = data.outputHR ?? '--';
 
     updateChart(data.realPower, data.outputPower);
@@ -108,6 +111,7 @@ ws.onmessage = (event) => {
     if (sliderBoost && document.activeElement !== sliderBoost) {
         sliderBoost.value = data.boostValue;
         document.getElementById('lbl-boost').innerText = data.boostValue;
+        updateSlidersFill();
     }
 
     updateConnectionStatus(data.connected);
@@ -115,25 +119,58 @@ ws.onmessage = (event) => {
 
 function updateTargets(devices, trainerAddress) {
     const box = document.getElementById('targets-list');
+
     if (!devices.length) {
-        box.innerHTML = '<div class="target-meta">No BLE targets found yet...</div>';
+        box.innerHTML = '<div class="target-meta">Listening on BLE interfaces...</div>';
         return;
+    }
+
+    if (box.children.length === 1 && box.children[0].classList.contains('target-meta')) {
+        box.innerHTML = '';
     }
 
     if (!selectedTarget && trainerAddress) selectedTarget = trainerAddress;
     if (!selectedTarget && devices[0]) selectedTarget = devices[0].address;
 
-    box.innerHTML = devices
-        .map((d) => {
-            const active = selectedTarget === d.address ? 'active' : '';
-            const type = [d.hasCyclingPower ? 'CyclingPower' : '', d.hasHeartRate ? 'HeartRate' : ''].filter(Boolean).join(', ');
-            const rssiText = d.address === localVirtualAddr ? 'RSSI N/A' : `RSSI ${d.rssi}`;
-            return `<div class="target-row ${active}" onclick="selectTarget('${d.address}')">
-            <div><strong>${d.name || 'Unknown'}</strong><div class="target-meta">${d.address}</div></div>
-            <div class="target-meta">${rssiText} • ${type || 'Unknown profile'}</div>
-        </div>`;
-        })
-        .join('');
+    // 1. Cria um Set com os endereços atuais para limpar quem desconectou
+    const currentAddresses = new Set(devices.map(d => d.address));
+    Array.from(box.children).forEach(child => {
+        const addr = child.getAttribute('data-address');
+        if (addr && !currentAddresses.has(addr)) {
+            child.remove();
+        }
+    });
+
+    devices.forEach((d) => {
+        const type = [d.hasCyclingPower ? 'PWR' : '', d.hasHeartRate ? 'HRM' : ''].filter(Boolean).join(' / ');
+        const rssiText = d.address === localVirtualAddr ? 'EMULATED' : `${d.rssi} dBm`;
+
+        let row = box.querySelector(`.target-row[data-address="${d.address}"]`);
+
+        if (!row) {
+            row = document.createElement('div');
+            row.className = 'target-row';
+            row.setAttribute('data-address', d.address);
+            row.onclick = () => selectTarget(d.address);
+            box.appendChild(row);
+        }
+
+        if (selectedTarget === d.address) {
+            row.classList.add('active');
+        } else {
+            row.classList.remove('active');
+        }
+
+        row.innerHTML = `
+            <div>
+                <strong>${d.name || 'Unknown Device'}</strong>
+                <div class="target-meta">${d.address}</div>
+            </div>
+            <div class="target-meta" style="text-align: right;">
+                ${rssiText} <br> ${type || 'No Profile'}
+            </div>
+        `;
+    });
 }
 
 function selectTarget(addr) {
@@ -143,15 +180,34 @@ function selectTarget(addr) {
 
 function updateIntegrity(report) {
     if (!report) return;
-    document.getElementById('sig-class').innerText = report.classification || '--';
+
+    document.getElementById('sig-class').innerText = (report.classification || 'UNKNOWN').toUpperCase();
     document.getElementById('sig-latency').innerText = `${report.signals?.latencyMeanMs ?? '--'} ms`;
     document.getElementById('sig-jitter').innerText = `${report.signals?.latencyJitterMs ?? '--'} ms`;
     document.getElementById('sig-hz').innerText = `${report.signals?.powerNotifyHz ?? '--'} Hz`;
     document.getElementById('sig-drift').innerText = `${report.signals?.powerCadenceDrift ?? '--'}`;
     document.getElementById('sig-stress').innerText = `${report.signals?.stressDropRate ?? '--'}`;
+
     document.getElementById('sig-oui').innerText = report.observedOui || '--';
     document.getElementById('sig-vendor').innerText = report.vendorGuess || '--';
-    document.getElementById('reason-list').innerHTML = (report.reasons || []).map((r) => `<li>${r}</li>`).join('');
+
+    const mfgData = report.manufacturerData || '0x00 (No Adv Data)';
+    document.getElementById('sig-mfg-data').innerText = mfgData;
+
+    const hash = report.gattHash || 'Awaiting deep introspection...';
+    document.getElementById('sig-gatt-hash').innerText = hash;
+
+    // Coloração baseada na classificação
+    const classEl = document.getElementById('sig-class');
+    classEl.style.color = report.classification === 'genuine' ? 'var(--success)' :
+        report.classification === 'suspect' ? 'var(--accent-attack)' : 'var(--danger)';
+
+    document.getElementById('reason-list').innerHTML = (report.reasons || []).map((r) => {
+        let icon = r.includes('[+]') ? "<i class='bx bx-check-shield' style='color:var(--success)'></i>" :
+            r.includes('[-]') ? "<i class='bx bx-error-alt' style='color:var(--danger)'></i>" :
+                "<i class='bx bx-info-circle' style='color:var(--primary)'></i>";
+        return `<li>${icon} <span>${r.replace(/\[\+\]|\[-\]|\[!\]/g, '')}</span></li>`;
+    }).join('');
 }
 
 function updateIntegrityChart(reports, devices) {
@@ -164,7 +220,7 @@ function updateIntegrityChart(reports, devices) {
     devices.forEach((d) => {
         const r = reports[d.address];
         if (!r) return;
-        chartLabels.push((d.name || d.address).slice(0, 14));
+        chartLabels.push((d.name || d.address).slice(0, 10));
         lat.push(r.signals?.latencyMeanMs || 0);
         jit.push(r.signals?.latencyJitterMs || 0);
     });
@@ -183,11 +239,11 @@ function updateConnectionStatus(isConnected) {
     if (isConnected) {
         dot.classList.add('connected');
         text.innerText = 'LINK ESTABLISHED';
-        text.style.color = 'var(--success)';
+        text.style.color = 'var(--text-main)';
         btnDisc.classList.remove('hidden');
     } else {
         dot.classList.remove('connected');
-        text.innerText = 'SEARCHING...';
+        text.innerText = 'ACQUIRING TARGET...';
         text.style.color = 'var(--text-muted)';
         btnDisc.classList.add('hidden');
     }
@@ -212,7 +268,11 @@ function updateModeUI(mode) {
     document.getElementById(`mode-${mode}`)?.classList.add('active');
     document.getElementById('ctrl-sim')?.classList.toggle('hidden', mode !== 'sim');
     document.getElementById('ctrl-bridge')?.classList.toggle('hidden', mode === 'sim');
-    chart.data.datasets[0].borderColor = mode === 'sim' ? '#3b82f6' : '#f59e0b';
+
+    chart.data.datasets[0].borderColor = mode === 'sim' ? '#00e5ff' : '#ff2a6d';
+    chart.data.datasets[0].backgroundColor = mode === 'sim' ?
+        (context) => createGradient(context.chart.ctx, 'rgba(0, 229, 255, 0.2)', 'rgba(0,0,0,0)') :
+        (context) => createGradient(context.chart.ctx, 'rgba(255, 42, 109, 0.2)', 'rgba(0,0,0,0)');
     chart.update();
 }
 
@@ -233,6 +293,8 @@ function updateBoostTypeUI(type) {
 
     lblUnit.innerText = type === 'fix' ? 'W' : '%';
     slider.max = type === 'fix' ? 300 : 100;
+
+    updateSlidersFill();
 }
 
 function sendBoost(val) {
@@ -246,7 +308,7 @@ function sendSim(val) {
 }
 
 function disconnectTrainer() {
-    if (confirm('Terminate Bluetooth Link?')) {
+    if (confirm('Terminate Active Link?')) {
         ws.send(JSON.stringify({ disconnect: true }));
     }
 }
@@ -298,6 +360,27 @@ function bindNavRoutes() {
         });
     });
 }
+
+function updateSlidersFill() {
+    document.querySelectorAll('.tech-slider').forEach(slider => {
+        const min = parseFloat(slider.min || 0);
+        const max = parseFloat(slider.max || 100);
+        const val = parseFloat(slider.value || 0);
+
+        let percent = ((val - min) / (max - min)) * 100;
+
+        slider.style.setProperty('--progress', `${percent}%`);
+    });
+}
+
+document.addEventListener('input', (e) => {
+    if (e.target.classList.contains('tech-slider')) {
+        updateSlidersFill();
+    }
+});
+
+
+updateSlidersFill();
 
 window.addEventListener('hashchange', applyRoute);
 applyRoute();
