@@ -292,7 +292,7 @@ function updateBoostTypeUI(type) {
     btnPct?.classList.toggle('active', type !== 'fix');
 
     lblUnit.innerText = type === 'fix' ? 'W' : '%';
-    slider.max = type === 'fix' ? 300 : 100;
+    slider.max = type === 'fix' ? 1000 : 100;
 
     updateSlidersFill();
 }
