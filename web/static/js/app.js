@@ -4,6 +4,46 @@ let currentBoostType = 'fix';
 let selectedTarget = '';
 let localVirtualAddr = '';
 
+// ====================
+// Theme Switcher Logic
+// ====================
+const themeToggleBtn = document.getElementById('theme-toggle');
+const themeIcon = themeToggleBtn.querySelector('i');
+const themeText = themeToggleBtn.querySelector('span');
+
+// Retrieve stored theme or default to dark
+const storedTheme = localStorage.getItem('argus_theme') || 'dark';
+if (storedTheme === 'light') {
+    document.body.classList.add('light-theme');
+    updateThemeUI('light');
+}
+
+themeToggleBtn.addEventListener('click', () => {
+    document.body.classList.toggle('light-theme');
+    const isLight = document.body.classList.contains('light-theme');
+    const newTheme = isLight ? 'light' : 'dark';
+    
+    // Persist choice
+    localStorage.setItem('argus_theme', newTheme);
+    updateThemeUI(newTheme);
+});
+
+function updateThemeUI(theme) {
+    if (theme === 'light') {
+        themeIcon.classList.replace('bx-sun', 'bx-moon');
+        themeText.textContent = 'Dark Mode';
+        Chart.defaults.color = '#475569'; // Darker text for light mode charts
+    } else {
+        themeIcon.classList.replace('bx-moon', 'bx-sun');
+        themeText.textContent = 'Light Mode';
+        Chart.defaults.color = '#64748b'; // Slate text for dark mode charts
+    }
+    
+    // Re-render charts to apply new global colors
+    if (chart) chart.update();
+    if (integrityChart) integrityChart.update();
+}
+
 const ctx = document.getElementById('powerChart').getContext('2d');
 const integrityCtx = document.getElementById('integrityChart')?.getContext('2d');
 
@@ -19,7 +59,7 @@ const labels = Array(initialDataCount).fill('');
 const dataReal = Array(initialDataCount).fill(0);
 const dataOut = Array(initialDataCount).fill(0);
 
-// Global Font change for SecOps Theme
+// Global Font
 Chart.defaults.font.family = "'JetBrains Mono', monospace";
 Chart.defaults.color = '#64748b';
 
