@@ -22,10 +22,13 @@ themeToggleBtn.addEventListener('click', () => {
     document.body.classList.toggle('light-theme');
     const isLight = document.body.classList.contains('light-theme');
     const newTheme = isLight ? 'light' : 'dark';
-    
+
     // Persist choice
     localStorage.setItem('argus_theme', newTheme);
     updateThemeUI(newTheme);
+
+    if (typeof chart !== 'undefined') chart.update();
+    if (typeof integrityChart !== 'undefined' && integrityChart) integrityChart.update();
 });
 
 function updateThemeUI(theme) {
@@ -38,10 +41,6 @@ function updateThemeUI(theme) {
         themeText.textContent = 'Light Mode';
         Chart.defaults.color = '#64748b'; // Slate text for dark mode charts
     }
-    
-    // Re-render charts to apply new global colors
-    if (chart) chart.update();
-    if (integrityChart) integrityChart.update();
 }
 
 const ctx = document.getElementById('powerChart').getContext('2d');
