@@ -3,6 +3,7 @@ package ble
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/SoNdA11/argus-recon/internal/app"
@@ -22,10 +23,12 @@ var (
 )
 
 var (
+	scannerMutex      sync.Mutex
 	trainerDevice     *bluetooth.Device
 	hrDevice          *bluetooth.Device
 	connectingTrainer bool
 	connectingHR      bool
+	scanStopChan      = make(chan struct{}, 1)
 )
 
 // StartScanner starts the BLE discovery process for both Trainer and HRM.
@@ -39,24 +42,50 @@ func StartScanner() {
 	}
 
 	for {
-		if shouldPauseScan() {
+		scannerMutex.Lock()
+		pause := shouldPauseScan()
+		scannerMutex.Unlock()
+
+		if pause {
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
 		fmt.Println("[BLE] Scanning...")
+
+		select {
+		case <-scanStopChan:
+		default:
+		}
+
+		go func() {
+			<-scanStopChan
+			Adapter.StopScan()
+		}()
+
 		err := Adapter.Scan(func(adapter *bluetooth.Adapter, result bluetooth.ScanResult) {
 			registerScanResult(result)
+
+			scannerMutex.Lock()
+			defer scannerMutex.Unlock()
 
 			if trainerDevice == nil && !connectingTrainer && result.HasServiceUUID(ServiceCyclingPower) {
 				connectingTrainer = true
 				addr := result.Address
 				name := result.LocalName()
+
+				select {
+				case scanStopChan <- struct{}{}:
+				default:
+				}
+
 				go func() {
 					fmt.Printf("[BLE] Found Power Meter: %s (%s)\n", name, addr.String())
-					adapter.StopScan()
 					connectTrainer(addr)
+
+					scannerMutex.Lock()
 					connectingTrainer = false
+					scannerMutex.Unlock()
 				}()
 			}
 
@@ -64,11 +93,19 @@ func StartScanner() {
 				connectingHR = true
 				addr := result.Address
 				name := result.LocalName()
+
+				select {
+				case scanStopChan <- struct{}{}:
+				default:
+				}
+
 				go func() {
 					fmt.Printf("[BLE] Found HR Monitor: %s (%s)\n", name, addr.String())
-					adapter.StopScan()
 					connectHR(addr)
+
+					scannerMutex.Lock()
 					connectingHR = false
+					scannerMutex.Unlock()
 				}()
 			}
 		})
@@ -96,13 +133,55 @@ func shouldPauseScan() bool {
 
 func connectTrainer(addr bluetooth.Address) {
 	fmt.Println("[BLE] Connecting to Trainer...")
-	device, err := Adapter.Connect(addr, bluetooth.ConnectionParams{})
+
+	params := bluetooth.ConnectionParams{
+		ConnectionTimeout: bluetooth.NewDuration(10 * time.Second),
+	}
+
+	device, err := Adapter.Connect(addr, params)
 	if err != nil {
 		fmt.Printf("[BLE] Connection failed: %v\n", err)
 		return
 	}
 
+	scannerMutex.Lock()
 	trainerDevice = &device
+	scannerMutex.Unlock()
+
+	var watchdogMutex sync.Mutex
+	lastActivity := time.Now()
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			watchdogMutex.Lock()
+			t := lastActivity
+			watchdogMutex.Unlock()
+
+			if time.Since(t) > 15*time.Second {
+				fmt.Println("[BLE] Trainer Disconnected (Watchdog Timeout). Re-arming scanner...")
+				device.Disconnect()
+
+				scannerMutex.Lock()
+				trainerDevice = nil
+				scannerMutex.Unlock()
+
+				app.State.Lock()
+				app.State.ConnectedReal = false
+				app.State.Unlock()
+				return
+			}
+
+			scannerMutex.Lock()
+			dev := trainerDevice
+			scannerMutex.Unlock()
+			if dev == nil {
+				return
+			}
+		}
+	}()
+
 	fmt.Println("[BLE] Trainer Connected! Initiating Deep GATT Discovery...")
 
 	app.State.Lock()
@@ -145,6 +224,10 @@ func connectTrainer(addr bluetooth.Address) {
 					}
 					lastNotify = now
 
+					watchdogMutex.Lock()
+					lastActivity = now
+					watchdogMutex.Unlock()
+
 					power, cadence := parsePowerCadence(buf)
 
 					app.State.Lock()
@@ -173,13 +256,55 @@ func connectTrainer(addr bluetooth.Address) {
 
 func connectHR(addr bluetooth.Address) {
 	fmt.Println("[BLE] Connecting to HR Monitor...")
-	device, err := Adapter.Connect(addr, bluetooth.ConnectionParams{})
+
+	params := bluetooth.ConnectionParams{
+		ConnectionTimeout: bluetooth.NewDuration(10 * time.Second),
+	}
+
+	device, err := Adapter.Connect(addr, params)
 	if err != nil {
 		fmt.Printf("[BLE] HR Connection failed: %v\n", err)
 		return
 	}
 
+	scannerMutex.Lock()
 	hrDevice = &device
+	scannerMutex.Unlock()
+
+	var watchdogMutex sync.Mutex
+	lastActivity := time.Now()
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			watchdogMutex.Lock()
+			t := lastActivity
+			watchdogMutex.Unlock()
+
+			if time.Since(t) > 15*time.Second {
+				fmt.Println("[BLE] HR Monitor Disconnected (Watchdog Timeout). Re-arming scanner...")
+				device.Disconnect()
+
+				scannerMutex.Lock()
+				hrDevice = nil
+				scannerMutex.Unlock()
+
+				app.State.Lock()
+				app.State.ConnectedHR = false
+				app.State.Unlock()
+				return
+			}
+
+			scannerMutex.Lock()
+			dev := hrDevice
+			scannerMutex.Unlock()
+			if dev == nil {
+				return
+			}
+		}
+	}()
+
 	fmt.Println("[BLE] HR Monitor Connected! Discovering Services...")
 
 	services, _ := device.DiscoverServices([]bluetooth.UUID{ServiceHeartRate})
@@ -189,6 +314,11 @@ func connectHR(addr bluetooth.Address) {
 			fmt.Println("[BLE] Subscribing to Heart Rate...")
 			char.EnableNotifications(func(buf []byte) {
 				t0 := time.Now()
+
+				watchdogMutex.Lock()
+				lastActivity = t0
+				watchdogMutex.Unlock()
+
 				hr := parseHR(buf)
 				latencyMs := time.Since(t0).Seconds() * 1000
 
@@ -312,6 +442,7 @@ func parseHR(buf []byte) int {
 
 // DisconnectTrainer gracefully closes connections
 func DisconnectTrainer() {
+	scannerMutex.Lock()
 	if trainerDevice != nil {
 		(*trainerDevice).Disconnect()
 		trainerDevice = nil
@@ -320,6 +451,7 @@ func DisconnectTrainer() {
 		(*hrDevice).Disconnect()
 		hrDevice = nil
 	}
+	scannerMutex.Unlock()
 
 	app.State.Lock()
 	app.State.ConnectedReal = false
